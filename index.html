@@ -1,944 +1,963 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Expression Detector - Ensemble Pro</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.2.0/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
     <style>
-      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
-
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-
-      :root {
-        --primary-bg: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        --glass-bg: rgba(255, 255, 255, 0.1);
-        --glass-border: rgba(255, 255, 255, 0.2);
-        --accent-color: #4facfe;
-        --success-color: #4caf50;
-        --text-primary: #ffffff;
-        --text-secondary: rgba(255, 255, 255, 0.8);
-        --shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-      }
-
-      body {
-        font-family: "Inter", sans-serif;
-        background: var(--primary-bg);
-        min-height: 100vh;
-        color: var(--text-primary);
-        overflow-x: hidden;
-      }
-
-      .container {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 20px;
-      }
-
-      .hero-section {
-        text-align: center;
-        padding: 40px 0;
-        opacity: 1;
-        transform: none;
-      }
-
-      .hero-title {
-        font-size: 3.5rem;
-        font-weight: 700;
-        margin-bottom: 15px;
-        background: linear-gradient(135deg, #ffffff, #f0f0f0);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-      }
-
-      .hero-subtitle {
-        font-size: 1.2rem;
-        color: var(--text-secondary);
-        margin-bottom: 30px;
-      }
-
-      .tech-badges {
-        display: flex;
-        justify-content: center;
-        flex-wrap: wrap;
-        gap: 15px;
-        margin-bottom: 30px;
-      }
-
-      .tech-badge {
-        background: var(--glass-bg);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        border: 1px solid var(--glass-border);
-        border-radius: 25px;
-        padding: 8px 16px;
-        font-size: 0.9rem;
-        font-weight: 500;
-        box-shadow: var(--shadow);
-      }
-
-      .status {
-        background: var(--glass-bg);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        border: 1px solid var(--glass-border);
-        border-radius: 15px;
-        padding: 20px;
-        margin: 30px 0;
-        text-align: center;
-        font-size: 1.1rem;
-        box-shadow: var(--shadow);
-      }
-
-      .status.loading {
-        background: linear-gradient(135deg, #ffeaa7, #fdcb6e);
-        color: #333;
-      }
-
-      .status.success {
-        background: linear-gradient(135deg, #a8edea, #fed6e3);
-        color: #333;
-      }
-
-      .status.error {
-        background: linear-gradient(135deg, #ff6b6b, #ee5a24);
-        color: #fff;
-      }
-
-      .upload-section {
-        background: var(--glass-bg);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        border: 1px solid var(--glass-border);
-        border-radius: 25px;
-        padding: 40px;
-        margin: 30px 0;
-        box-shadow: var(--shadow);
-        opacity: 1;
-        transform: none;
-      }
-
-      .drop-zone {
-        border: 2px dashed var(--glass-border);
-        border-radius: 20px;
-        padding: 50px 30px;
-        text-align: center;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        margin-bottom: 30px;
-      }
-
-      .drop-zone:hover,
-      .drop-zone.drag-over {
-        border-color: var(--accent-color);
-        background: rgba(79, 172, 254, 0.1);
-        transform: scale(1.02);
-      }
-
-      .drop-zone-icon {
-        font-size: 3rem;
-        margin-bottom: 20px;
-      }
-
-      .drop-zone-text {
-        font-size: 1.2rem;
-        margin-bottom: 10px;
-      }
-
-      .drop-zone-subtext {
-        color: var(--text-secondary);
-        font-size: 0.9rem;
-      }
-
-      .upload-options {
-        display: flex;
-        gap: 20px;
-        justify-content: center;
-        flex-wrap: wrap;
-      }
-
-      .upload-button {
-        background: linear-gradient(45deg, var(--accent-color), #00f2fe);
-        color: white;
-        border: none;
-        padding: 15px 30px;
-        border-radius: 25px;
-        font-size: 1rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        box-shadow: var(--shadow);
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
-
-      .upload-button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-      }
-
-      .upload-button:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-        transform: none;
-      }
-
-      .file-input {
-        display: none;
-      }
-
-      .camera-section {
-        display: none;
-        margin-top: 30px;
-        text-align: center;
-      }
-
-      .camera-container {
-        display: inline-block;
-        border-radius: 15px;
-        overflow: hidden;
-        box-shadow: var(--shadow);
-        margin-bottom: 20px;
-      }
-
-      #videoElement {
-        width: 400px;
-        height: 300px;
-        transform: scaleX(-1);
-        object-fit: cover;
-      }
-
-      .camera-controls {
-        display: flex;
-        gap: 15px;
-        justify-content: center;
-      }
-
-      .image-container {
-        background: var(--glass-bg);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        border: 1px solid var(--glass-border);
-        border-radius: 25px;
-        padding: 30px;
-        margin: 30px 0;
-        box-shadow: var(--shadow);
-        display: none;
-        text-align: center;
-      }
-
-      #imageDisplay {
-        max-width: 100%;
-        max-height: 500px;
-        border-radius: 15px;
-        box-shadow: var(--shadow);
-        margin-bottom: 20px;
-      }
-
-      .canvas-overlay {
-        position: absolute;
-        top: 30px;
-        left: 30px;
-        pointer-events: none;
-        border-radius: 15px;
-      }
-
-      .analyze-button {
-        background: linear-gradient(45deg, var(--success-color), #8bc34a);
-        color: white;
-        border: none;
-        padding: 15px 40px;
-        border-radius: 25px;
-        font-size: 1.1rem;
-        font-weight: 700;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        box-shadow: var(--shadow);
-      }
-
-      .analyze-button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-      }
-
-      .analyze-button:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-        transform: none;
-      }
-
-      .results-section {
-        display: none;
-        margin-top: 40px;
-      }
-
-      .results-title {
-        text-align: center;
-        font-size: 2.5rem;
-        font-weight: 700;
-        margin-bottom: 30px;
-      }
-
-      .face-info {
-        background: var(--glass-bg);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        border: 1px solid var(--glass-border);
-        border-radius: 15px;
-        padding: 20px;
-        margin-bottom: 30px;
-        text-align: center;
-        box-shadow: var(--shadow);
-      }
-
-      .face-details {
-        display: flex;
-        justify-content: center;
-        gap: 20px;
-        flex-wrap: wrap;
-        margin-top: 15px;
-      }
-
-      .face-detail {
-        background: rgba(255, 255, 255, 0.1);
-        padding: 8px 16px;
-        border-radius: 12px;
-        font-size: 0.9rem;
-      }
-
-      .predictions {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-        gap: 20px;
-      }
-
-      .prediction-card {
-        background: var(--glass-bg);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        border: 1px solid var(--glass-border);
-        border-radius: 20px;
-        padding: 25px;
-        text-align: center;
-        box-shadow: var(--shadow);
-        transition: all 0.3s ease;
-      }
-
-      .prediction-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
-      }
-
-      .prediction-card.top-prediction {
-        border: 2px solid var(--success-color);
-        box-shadow: 0 10px 30px rgba(76, 175, 80, 0.3);
-      }
-
-      .expression-emoji {
-        font-size: 3rem;
-        margin-bottom: 15px;
-      }
-
-      .expression-name {
-        font-size: 1.3rem;
-        font-weight: 600;
-        margin-bottom: 15px;
-      }
-
-      .confidence-bar {
-        width: 100%;
-        height: 8px;
-        background: rgba(255, 255, 255, 0.2);
-        border-radius: 10px;
-        overflow: hidden;
-        margin: 15px 0;
-      }
-
-      .confidence-fill {
-        height: 100%;
-        background: linear-gradient(90deg, var(--success-color), #8bc34a);
-        border-radius: 10px;
-        transition: width 1s ease;
-      }
-
-      .confidence-text {
-        font-size: 1rem;
-        font-weight: 600;
-        margin-top: 10px;
-      }
-
-      .loading-spinner {
-        display: inline-block;
-        width: 20px;
-        height: 20px;
-        border: 2px solid rgba(255, 255, 255, 0.3);
-        border-top: 2px solid white;
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-        margin-right: 10px;
-      }
-
-      @keyframes spin {
-        0% {
-          transform: rotate(0deg);
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        100% {
-          transform: rotate(360deg);
-        }
-      }
 
-      @media (max-width: 768px) {
+        :root {
+            --primary-bg: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --glass-bg: rgba(255, 255, 255, 0.1);
+            --glass-border: rgba(255, 255, 255, 0.2);
+            --accent-color: #4facfe;
+            --success-color: #4caf50;
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.8);
+            --shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--primary-bg);
+            min-height: 100vh;
+            color: var(--text-primary);
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .hero-section {
+            text-align: center;
+            padding: 40px 0;
+        }
+
         .hero-title {
-          font-size: 2.5rem;
+            font-size: 3.5rem;
+            font-weight: 700;
+            margin-bottom: 15px;
+            background: linear-gradient(135deg, #ffffff, #f0f0f0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-subtitle {
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+            margin-bottom: 30px;
+        }
+
+        .tech-badges {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .tech-badge {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            border-radius: 25px;
+            padding: 8px 16px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            box-shadow: var(--shadow);
+        }
+
+        .status {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 30px 0;
+            text-align: center;
+            font-size: 1.1rem;
+            box-shadow: var(--shadow);
+        }
+
+        .status.loading {
+            background: linear-gradient(135deg, #ffeaa7, #fdcb6e);
+            color: #333;
+        }
+
+        .status.success {
+            background: linear-gradient(135deg, #a8edea, #fed6e3);
+            color: #333;
+        }
+
+        .status.error {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+            color: #fff;
+        }
+
+        .upload-section {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            border-radius: 25px;
+            padding: 40px;
+            margin: 30px 0;
+            box-shadow: var(--shadow);
+        }
+
+        .drop-zone {
+            border: 2px dashed var(--glass-border);
+            border-radius: 20px;
+            padding: 50px 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 30px;
+        }
+
+        .drop-zone:hover,
+        .drop-zone.drag-over {
+            border-color: var(--accent-color);
+            background: rgba(79, 172, 254, 0.1);
+            transform: scale(1.02);
+        }
+
+        .drop-zone-icon {
+            font-size: 3rem;
+            margin-bottom: 20px;
+        }
+
+        .drop-zone-text {
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+        }
+
+        .drop-zone-subtext {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
         }
 
         .upload-options {
-          flex-direction: column;
-          align-items: center;
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
         }
 
-        .predictions {
-          grid-template-columns: 1fr;
+        .upload-button {
+            background: linear-gradient(45deg, var(--accent-color), #00f2fe);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: var(--shadow);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .upload-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .upload-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .camera-section {
+            display: none;
+            margin-top: 30px;
+            text-align: center;
+        }
+
+        .camera-container {
+            display: inline-block;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+            margin-bottom: 20px;
         }
 
         #videoElement {
-          width: 300px;
-          height: 225px;
+            width: 400px;
+            height: 300px;
+            transform: scaleX(-1);
+            object-fit: cover;
         }
-      }
+
+        .camera-controls {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .image-container {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            border-radius: 25px;
+            padding: 30px;
+            margin: 30px 0;
+            box-shadow: var(--shadow);
+            display: none;
+            text-align: center;
+            position: relative;
+        }
+
+        #imageDisplay {
+            max-width: 100%;
+            max-height: 500px;
+            border-radius: 15px;
+            box-shadow: var(--shadow);
+            margin-bottom: 20px;
+        }
+
+        .canvas-overlay {
+            position: absolute;
+            top: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            pointer-events: none;
+            border-radius: 15px;
+        }
+
+        .analyze-button {
+            background: linear-gradient(45deg, var(--success-color), #8bc34a);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 25px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: var(--shadow);
+        }
+
+        .analyze-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .analyze-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .results-section {
+            display: none;
+            margin-top: 40px;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        .results-section.visible {
+            display: block;
+            opacity: 1;
+        }
+
+        .results-title {
+            text-align: center;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 30px;
+            color: var(--text-primary);
+        }
+
+        .face-info {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+            text-align: center;
+            box-shadow: var(--shadow);
+        }
+
+        .face-info h3 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: var(--text-primary);
+        }
+
+        .face-details {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+
+        .face-detail {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 8px 16px;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .predictions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin-top: 20px;
+        }
+
+        .prediction-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 30px;
+            text-align: center;
+            box-shadow: var(--shadow);
+            transition: all 0.3s ease;
+            position: relative;
+            min-height: 200px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .prediction-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+        }
+
+        .prediction-card.top-prediction {
+            border: 2px solid var(--success-color);
+            box-shadow: 0 10px 30px rgba(76, 175, 80, 0.3);
+        }
+
+        .prediction-card.top-prediction::before {
+            content: '👑';
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            font-size: 1.5rem;
+        }
+
+        .expression-emoji {
+            font-size: 4rem;
+            margin-bottom: 15px;
+            display: block;
+        }
+
+        .expression-name {
+            font-size: 1.4rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: var(--text-primary);
+        }
+
+        .confidence-bar {
+            width: 100%;
+            height: 10px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 15px 0;
+            position: relative;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--success-color), #8bc34a);
+            border-radius: 10px;
+            transition: width 1.5s ease;
+            position: relative;
+        }
+
+        .confidence-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        .confidence-text {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-top: 10px;
+            color: var(--text-primary);
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top: 2px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        @media (max-width: 768px) {
+            .hero-title {
+                font-size: 2.5rem;
+            }
+            
+            .upload-options {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .predictions {
+                grid-template-columns: 1fr;
+            }
+            
+            #videoElement {
+                width: 300px;
+                height: 225px;
+            }
+            
+            .prediction-card {
+                min-height: 180px;
+                padding: 20px;
+            }
+            
+            .expression-emoji {
+                font-size: 3rem;
+            }
+        }
     </style>
-  </head>
-  <body>
+</head>
+<body>
     <div class="container">
-      <div class="hero-section">
-        <h1 class="hero-title">🎭 AI Expression Detector</h1>
-        <p class="hero-subtitle">
-          Advanced ensemble AI technology for precise facial expression
-          recognition
-        </p>
-        <div class="tech-badges">
-          <span class="tech-badge">🧠 Ensemble AI</span>
-          <span class="tech-badge">📊 Multi-Model</span>
-          <span class="tech-badge">⚡ Real-time</span>
-          <span class="tech-badge">🎯 High Accuracy</span>
-        </div>
-      </div>
-
-      <div class="status" id="status">Initializing AI models...</div>
-
-      <div class="upload-section">
-        <div class="drop-zone" id="dropZone">
-          <div class="drop-zone-icon">📸</div>
-          <div class="drop-zone-text">Drag & drop your image here</div>
-          <div class="drop-zone-subtext">or click to browse files</div>
+        <div class="hero-section">
+            <h1 class="hero-title">🎭 AI Expression Detector</h1>
+            <p class="hero-subtitle">Advanced ensemble AI technology for precise facial expression recognition</p>
+            <div class="tech-badges">
+                <span class="tech-badge">🧠 Ensemble AI</span>
+                <span class="tech-badge">📊 Multi-Model</span>
+                <span class="tech-badge">⚡ Real-time</span>
+                <span class="tech-badge">🎯 High Accuracy</span>
+            </div>
         </div>
 
-        <div class="upload-options">
-          <button class="upload-button" id="uploadButton">
-            📁 Upload Image
-          </button>
-          <button class="upload-button" id="cameraButton">📷 Take Photo</button>
+        <div class="status" id="status">Initializing AI models...</div>
+
+        <div class="upload-section">
+            <div class="drop-zone" id="dropZone">
+                <div class="drop-zone-icon">📸</div>
+                <div class="drop-zone-text">Drag & drop your image here</div>
+                <div class="drop-zone-subtext">or click to browse files</div>
+            </div>
+
+            <div class="upload-options">
+                <button class="upload-button" id="uploadButton">
+                    📁 Upload Image
+                </button>
+                <button class="upload-button" id="cameraButton">
+                    📷 Take Photo
+                </button>
+            </div>
+
+            <input type="file" id="fileInput" class="file-input" accept="image/*" />
+
+            <div class="camera-section" id="cameraSection">
+                <div class="camera-container">
+                    <video id="videoElement" autoplay muted playsinline></video>
+                </div>
+                <div class="camera-controls">
+                    <button class="upload-button" id="captureButton">
+                        📷 Capture Photo
+                    </button>
+                    <button class="upload-button" id="closeCameraButton">
+                        ❌ Close Camera
+                    </button>
+                </div>
+            </div>
         </div>
 
-        <input type="file" id="fileInput" class="file-input" accept="image/*" />
-
-        <div class="camera-section" id="cameraSection">
-          <div class="camera-container">
-            <video id="videoElement" autoplay muted playsinline></video>
-          </div>
-          <div class="camera-controls">
-            <button class="upload-button" id="captureButton">
-              📷 Capture Photo
+        <div class="image-container" id="imageContainer">
+            <img id="imageDisplay" alt="Uploaded image" />
+            <canvas id="overlay" class="canvas-overlay"></canvas>
+            <button class="analyze-button" id="analyzeButton">
+                🔍 Analyze Expression
             </button>
-            <button class="upload-button" id="closeCameraButton">
-              ❌ Close Camera
-            </button>
-          </div>
         </div>
-      </div>
 
-      <div class="image-container" id="imageContainer">
-        <div style="position: relative">
-          <img id="imageDisplay" alt="Uploaded image" />
-          <canvas id="overlay" class="canvas-overlay"></canvas>
+        <div class="results-section" id="resultsSection">
+            <h2 class="results-title">Expression Analysis Results</h2>
+            <div id="faceInfo"></div>
+            <div class="predictions" id="predictions"></div>
         </div>
-        <button class="analyze-button" id="analyzeButton">
-          🔍 Analyze Expression
-        </button>
-      </div>
-
-      <div class="results-section" id="resultsSection">
-        <h2 class="results-title">Expression Analysis Results</h2>
-        <div id="faceInfo"></div>
-        <div class="predictions" id="predictions"></div>
-      </div>
     </div>
 
     <script>
-      class EnsembleExpressionDetector {
-        constructor() {
-          this.elements = {
-            status: document.getElementById("status"),
-            dropZone: document.getElementById("dropZone"),
-            uploadButton: document.getElementById("uploadButton"),
-            cameraButton: document.getElementById("cameraButton"),
-            fileInput: document.getElementById("fileInput"),
-            cameraSection: document.getElementById("cameraSection"),
-            video: document.getElementById("videoElement"),
-            captureButton: document.getElementById("captureButton"),
-            closeCameraButton: document.getElementById("closeCameraButton"),
-            imageContainer: document.getElementById("imageContainer"),
-            imageDisplay: document.getElementById("imageDisplay"),
-            canvas: document.getElementById("overlay"),
-            analyzeButton: document.getElementById("analyzeButton"),
-            resultsSection: document.getElementById("resultsSection"),
-            faceInfo: document.getElementById("faceInfo"),
-            predictions: document.getElementById("predictions"),
-          };
+        class EnsembleExpressionDetector {
+            constructor() {
+                this.elements = {
+                    status: document.getElementById('status'),
+                    dropZone: document.getElementById('dropZone'),
+                    uploadButton: document.getElementById('uploadButton'),
+                    cameraButton: document.getElementById('cameraButton'),
+                    fileInput: document.getElementById('fileInput'),
+                    cameraSection: document.getElementById('cameraSection'),
+                    video: document.getElementById('videoElement'),
+                    captureButton: document.getElementById('captureButton'),
+                    closeCameraButton: document.getElementById('closeCameraButton'),
+                    imageContainer: document.getElementById('imageContainer'),
+                    imageDisplay: document.getElementById('imageDisplay'),
+                    canvas: document.getElementById('overlay'),
+                    analyzeButton: document.getElementById('analyzeButton'),
+                    resultsSection: document.getElementById('resultsSection'),
+                    faceInfo: document.getElementById('faceInfo'),
+                    predictions: document.getElementById('predictions')
+                };
 
-          this.ctx = this.elements.canvas.getContext("2d");
-          this.currentImage = null;
-          this.stream = null;
-          this.modelsLoaded = false;
-          this.models = {};
+                this.ctx = this.elements.canvas.getContext('2d');
+                this.currentImage = null;
+                this.stream = null;
+                this.modelsLoaded = false;
+                this.models = {};
 
-          this.expressions = {
-            happy: "😊",
-            sad: "😢",
-            angry: "😠",
-            surprised: "😮",
-            fearful: "😨",
-            disgusted: "🤢",
-            neutral: "😐",
-          };
+                this.expressions = {
+                    happy: "😊",
+                    sad: "😢",
+                    angry: "😠",
+                    surprised: "😮",
+                    fearful: "😨",
+                    disgusted: "🤢",
+                    neutral: "😐"
+                };
 
-          this.init();
-        }
-
-        async init() {
-          this.setupEventListeners();
-          await this.loadModels();
-        }
-
-        setupEventListeners() {
-          // File upload
-          this.elements.uploadButton.addEventListener("click", () =>
-            this.elements.fileInput.click()
-          );
-          this.elements.fileInput.addEventListener("change", (e) =>
-            this.handleFileSelect(e)
-          );
-
-          // Drag and drop
-          this.elements.dropZone.addEventListener("click", () =>
-            this.elements.fileInput.click()
-          );
-          this.elements.dropZone.addEventListener("dragover", (e) =>
-            this.handleDragOver(e)
-          );
-          this.elements.dropZone.addEventListener("drop", (e) =>
-            this.handleDrop(e)
-          );
-          this.elements.dropZone.addEventListener("dragleave", () =>
-            this.elements.dropZone.classList.remove("drag-over")
-          );
-
-          // Camera
-          this.elements.cameraButton.addEventListener("click", () =>
-            this.startCamera()
-          );
-          this.elements.captureButton.addEventListener("click", () =>
-            this.capturePhoto()
-          );
-          this.elements.closeCameraButton.addEventListener("click", () =>
-            this.closeCamera()
-          );
-
-          // Analysis
-          this.elements.analyzeButton.addEventListener("click", () =>
-            this.analyzeExpression()
-          );
-        }
-
-        async loadModels() {
-          try {
-            this.updateStatus("Loading Face-API models...", "loading");
-
-            // Check if libraries are loaded
-            if (typeof faceapi === "undefined") {
-              throw new Error("Face-API.js not loaded");
+                this.init();
             }
 
-            const MODEL_URL =
-              "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@latest/model/";
-
-            await Promise.all([
-              faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-              faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-              faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-              faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
-            ]);
-
-            this.models.faceApi = faceapi;
-            this.modelsLoaded = true;
-            this.updateStatus(
-              "🎯 All models loaded successfully! Ready to analyze expressions.",
-              "success"
-            );
-          } catch (error) {
-            console.error("Model loading error:", error);
-            this.updateStatus(
-              "⚠️ Model loading failed. Please refresh the page.",
-              "error"
-            );
-          }
-        }
-
-        updateStatus(message, type = "normal") {
-          const statusEl = this.elements.status;
-          statusEl.className = `status ${type}`;
-
-          if (type === "loading") {
-            statusEl.innerHTML = `<span class="loading-spinner"></span>${message}`;
-          } else {
-            statusEl.textContent = message;
-          }
-        }
-
-        handleDragOver(e) {
-          e.preventDefault();
-          this.elements.dropZone.classList.add("drag-over");
-        }
-
-        handleDrop(e) {
-          e.preventDefault();
-          this.elements.dropZone.classList.remove("drag-over");
-          const files = e.dataTransfer.files;
-          if (files.length > 0 && files[0].type.startsWith("image/")) {
-            this.loadImage(files[0]);
-          }
-        }
-
-        handleFileSelect(e) {
-          const file = e.target.files[0];
-          if (file && file.type.startsWith("image/")) {
-            this.loadImage(file);
-          }
-        }
-
-        loadImage(file) {
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            this.elements.imageDisplay.src = e.target.result;
-            this.elements.imageDisplay.onload = () => {
-              this.currentImage = this.elements.imageDisplay;
-              this.showImageContainer();
-              this.setupCanvas();
-              this.updateStatus(
-                '✨ Image loaded! Click "Analyze Expression" to detect emotions.',
-                "success"
-              );
-              this.clearResults();
-            };
-          };
-          reader.readAsDataURL(file);
-        }
-
-        showImageContainer() {
-          this.elements.imageContainer.style.display = "block";
-          if (typeof gsap !== "undefined") {
-            gsap.from(this.elements.imageContainer, {
-              opacity: 0,
-              y: 30,
-              duration: 0.5,
-              ease: "power2.out",
-            });
-          }
-        }
-
-        async startCamera() {
-          try {
-            this.stream = await navigator.mediaDevices.getUserMedia({
-              video: { facingMode: "user" },
-            });
-            this.elements.video.srcObject = this.stream;
-            this.elements.cameraSection.style.display = "block";
-            this.updateStatus(
-              '📹 Camera active. Click "Capture Photo" to take a picture.',
-              "normal"
-            );
-          } catch (error) {
-            console.error("Camera error:", error);
-            this.updateStatus(
-              "⚠️ Camera access denied. Please upload an image instead.",
-              "error"
-            );
-          }
-        }
-
-        capturePhoto() {
-          const canvas = document.createElement("canvas");
-          canvas.width = this.elements.video.videoWidth;
-          canvas.height = this.elements.video.videoHeight;
-          const ctx = canvas.getContext("2d");
-
-          ctx.scale(-1, 1);
-          ctx.drawImage(
-            this.elements.video,
-            -canvas.width,
-            0,
-            canvas.width,
-            canvas.height
-          );
-
-          this.elements.imageDisplay.src = canvas.toDataURL();
-          this.elements.imageDisplay.onload = () => {
-            this.currentImage = this.elements.imageDisplay;
-            this.showImageContainer();
-            this.setupCanvas();
-            this.closeCamera();
-            this.updateStatus(
-              '📸 Photo captured! Click "Analyze Expression" to detect emotions.',
-              "success"
-            );
-            this.clearResults();
-          };
-        }
-
-        closeCamera() {
-          if (this.stream) {
-            this.stream.getTracks().forEach((track) => track.stop());
-            this.stream = null;
-          }
-          this.elements.cameraSection.style.display = "none";
-        }
-
-        setupCanvas() {
-          this.elements.canvas.width = this.elements.imageDisplay.width;
-          this.elements.canvas.height = this.elements.imageDisplay.height;
-          this.ctx.clearRect(
-            0,
-            0,
-            this.elements.canvas.width,
-            this.elements.canvas.height
-          );
-        }
-
-        clearResults() {
-          this.elements.predictions.innerHTML = "";
-          this.elements.faceInfo.innerHTML = "";
-          this.elements.resultsSection.style.display = "none";
-        }
-
-        async analyzeExpression() {
-          if (!this.currentImage || !this.modelsLoaded) {
-            this.updateStatus(
-              this.modelsLoaded
-                ? "📸 Please upload an image first."
-                : "⏳ Models are still loading...",
-              "error"
-            );
-            return;
-          }
-
-          this.elements.analyzeButton.disabled = true;
-          this.updateStatus("🔍 Analyzing facial expressions...", "loading");
-
-          try {
-            const detections = await this.detectFaces();
-
-            if (!detections || detections.length === 0) {
-              this.updateStatus(
-                "😔 No faces detected. Please try another image with clear faces.",
-                "error"
-              );
-              return;
+            async init() {
+                this.setupEventListeners();
+                await this.loadModels();
             }
 
-            this.drawDetections(detections);
-            this.displayResults(detections);
-            this.updateStatus(
-              `🎯 Analysis complete! Found ${detections.length} face(s).`,
-              "success"
-            );
-          } catch (error) {
-            console.error("Analysis error:", error);
-            this.updateStatus("❌ Analysis failed. Please try again.", "error");
-          } finally {
-            this.elements.analyzeButton.disabled = false;
-          }
-        }
+            setupEventListeners() {
+                // File upload
+                this.elements.uploadButton.addEventListener('click', () => this.elements.fileInput.click());
+                this.elements.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
 
-        async detectFaces() {
-          if (!this.models.faceApi) {
-            throw new Error("Face-API model not loaded");
-          }
+                // Drag and drop
+                this.elements.dropZone.addEventListener('click', () => this.elements.fileInput.click());
+                this.elements.dropZone.addEventListener('dragover', (e) => this.handleDragOver(e));
+                this.elements.dropZone.addEventListener('drop', (e) => this.handleDrop(e));
+                this.elements.dropZone.addEventListener('dragleave', () => this.elements.dropZone.classList.remove('drag-over'));
 
-          const detections = await faceapi
-            .detectAllFaces(
-              this.currentImage,
-              new faceapi.TinyFaceDetectorOptions()
-            )
-            .withFaceLandmarks()
-            .withFaceExpressions();
+                // Camera
+                this.elements.cameraButton.addEventListener('click', () => this.startCamera());
+                this.elements.captureButton.addEventListener('click', () => this.capturePhoto());
+                this.elements.closeCameraButton.addEventListener('click', () => this.closeCamera());
 
-          return detections;
-        }
-
-        drawDetections(detections) {
-          this.ctx.clearRect(
-            0,
-            0,
-            this.elements.canvas.width,
-            this.elements.canvas.height
-          );
-
-          detections.forEach((detection, index) => {
-            const box = detection.detection.box;
-
-            // Draw face box
-            this.ctx.strokeStyle = "#4facfe";
-            this.ctx.lineWidth = 3;
-            this.ctx.strokeRect(box.x, box.y, box.width, box.height);
-
-            // Draw label
-            this.ctx.fillStyle = "#4facfe";
-            this.ctx.font = "bold 16px Inter";
-            const confidence = (detection.detection.score * 100).toFixed(0);
-            this.ctx.fillText(
-              `Face ${index + 1} (${confidence}%)`,
-              box.x,
-              box.y - 5
-            );
-
-            // Draw landmarks
-            if (detection.landmarks) {
-              this.ctx.fillStyle = "#ff4444";
-              detection.landmarks.positions.forEach((point) => {
-                this.ctx.beginPath();
-                this.ctx.arc(point.x, point.y, 2, 0, 2 * Math.PI);
-                this.ctx.fill();
-              });
+                // Analysis
+                this.elements.analyzeButton.addEventListener('click', () => this.analyzeExpression());
             }
-          });
-        }
 
-        displayResults(detections) {
-          this.elements.faceInfo.innerHTML = "";
-          this.elements.predictions.innerHTML = "";
+            async loadModels() {
+                try {
+                    this.updateStatus('Loading Face-API models...', 'loading');
+                    
+                    // Check if libraries are loaded
+                    if (typeof faceapi === 'undefined') {
+                        throw new Error('Face-API.js not loaded');
+                    }
 
-          detections.forEach((detection, faceIndex) => {
-            // Face info
-            const faceInfoDiv = document.createElement("div");
-            faceInfoDiv.className = "face-info";
-            faceInfoDiv.innerHTML = `
+                    const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@latest/model/';
+                    
+                    await Promise.all([
+                        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                        faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                        faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+                        faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL)
+                    ]);
+
+                    this.models.faceApi = faceapi;
+                    this.modelsLoaded = true;
+                    this.updateStatus('🎯 All models loaded successfully! Ready to analyze expressions.', 'success');
+                    
+                } catch (error) {
+                    console.error('Model loading error:', error);
+                    this.updateStatus('⚠️ Model loading failed. Please refresh the page.', 'error');
+                }
+            }
+
+            updateStatus(message, type = 'normal') {
+                const statusEl = this.elements.status;
+                statusEl.className = `status ${type}`;
+                
+                if (type === 'loading') {
+                    statusEl.innerHTML = `<span class="loading-spinner"></span>${message}`;
+                } else {
+                    statusEl.textContent = message;
+                }
+            }
+
+            handleDragOver(e) {
+                e.preventDefault();
+                this.elements.dropZone.classList.add('drag-over');
+            }
+
+            handleDrop(e) {
+                e.preventDefault();
+                this.elements.dropZone.classList.remove('drag-over');
+                const files = e.dataTransfer.files;
+                if (files.length > 0 && files[0].type.startsWith('image/')) {
+                    this.loadImage(files[0]);
+                }
+            }
+
+            handleFileSelect(e) {
+                const file = e.target.files[0];
+                if (file && file.type.startsWith('image/')) {
+                    this.loadImage(file);
+                }
+            }
+
+            loadImage(file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    this.elements.imageDisplay.src = e.target.result;
+                    this.elements.imageDisplay.onload = () => {
+                        this.currentImage = this.elements.imageDisplay;
+                        this.showImageContainer();
+                        this.setupCanvas();
+                        this.updateStatus('✨ Image loaded! Click "Analyze Expression" to detect emotions.', 'success');
+                        this.clearResults();
+                    };
+                };
+                reader.readAsDataURL(file);
+            }
+
+            showImageContainer() {
+                this.elements.imageContainer.style.display = 'block';
+                if (typeof gsap !== 'undefined') {
+                    gsap.from(this.elements.imageContainer, {
+                        opacity: 0,
+                        y: 30,
+                        duration: 0.5,
+                        ease: "power2.out"
+                    });
+                }
+            }
+
+            async startCamera() {
+                try {
+                    this.stream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: 'user' }
+                    });
+                    this.elements.video.srcObject = this.stream;
+                    this.elements.cameraSection.style.display = 'block';
+                    this.updateStatus('📹 Camera active. Click "Capture Photo" to take a picture.', 'normal');
+                } catch (error) {
+                    console.error('Camera error:', error);
+                    this.updateStatus('⚠️ Camera access denied. Please upload an image instead.', 'error');
+                }
+            }
+
+            capturePhoto() {
+                const canvas = document.createElement('canvas');
+                canvas.width = this.elements.video.videoWidth;
+                canvas.height = this.elements.video.videoHeight;
+                const ctx = canvas.getContext('2d');
+
+                ctx.scale(-1, 1);
+                ctx.drawImage(this.elements.video, -canvas.width, 0, canvas.width, canvas.height);
+
+                this.elements.imageDisplay.src = canvas.toDataURL();
+                this.elements.imageDisplay.onload = () => {
+                    this.currentImage = this.elements.imageDisplay;
+                    this.showImageContainer();
+                    this.setupCanvas();
+                    this.closeCamera();
+                    this.updateStatus('📸 Photo captured! Click "Analyze Expression" to detect emotions.', 'success');
+                    this.clearResults();
+                };
+            }
+
+            closeCamera() {
+                if (this.stream) {
+                    this.stream.getTracks().forEach(track => track.stop());
+                    this.stream = null;
+                }
+                this.elements.cameraSection.style.display = 'none';
+            }
+
+            setupCanvas() {
+                // Get the displayed image dimensions
+                const rect = this.elements.imageDisplay.getBoundingClientRect();
+                this.elements.canvas.width = this.elements.imageDisplay.offsetWidth;
+                this.elements.canvas.height = this.elements.imageDisplay.offsetHeight;
+                this.ctx.clearRect(0, 0, this.elements.canvas.width, this.elements.canvas.height);
+            }
+
+            clearResults() {
+                this.elements.predictions.innerHTML = '';
+                this.elements.faceInfo.innerHTML = '';
+                this.elements.resultsSection.style.display = 'none';
+                this.elements.resultsSection.classList.remove('visible');
+            }
+
+            async analyzeExpression() {
+                if (!this.currentImage || !this.modelsLoaded) {
+                    this.updateStatus(
+                        this.modelsLoaded ? '📸 Please upload an image first.' : '⏳ Models are still loading...',
+                        'error'
+                    );
+                    return;
+                }
+
+                this.elements.analyzeButton.disabled = true;
+                this.updateStatus('🔍 Analyzing facial expressions...', 'loading');
+
+                try {
+                    const detections = await this.detectFaces();
+
+                    if (!detections || detections.length === 0) {
+                        this.updateStatus('😔 No faces detected. Please try another image with clear faces.', 'error');
+                        this.showNoResults();
+                        return;
+                    }
+
+                    this.drawDetections(detections);
+                    this.displayResults(detections);
+                    this.updateStatus(`🎯 Analysis complete! Found ${detections.length} face(s).`, 'success');
+
+                } catch (error) {
+                    console.error('Analysis error:', error);
+                    this.updateStatus('❌ Analysis failed. Please try again.', 'error');
+                } finally {
+                    this.elements.analyzeButton.disabled = false;
+                }
+            }
+
+            showNoResults() {
+                this.elements.predictions.innerHTML = '<div class="no-results">No faces detected in the image. Please try with a clearer image showing faces.</div>';
+                this.elements.resultsSection.style.display = 'block';
+                this.elements.resultsSection.classList.add('visible');
+            }
+
+            async detectFaces() {
+                if (!this.models.faceApi) {
+                    throw new Error('Face-API model not loaded');
+                }
+
+                const detections = await faceapi
+                    .detectAllFaces(this.currentImage, new faceapi.TinyFaceDetectorOptions())
+                    .withFaceLandmarks()
+                    .withFaceExpressions();
+
+                return detections;
+            }
+
+            drawDetections(detections) {
+                this.ctx.clearRect(0, 0, this.elements.canvas.width, this.elements.canvas.height);
+
+                // Calculate scale factors
+                const scaleX = this.elements.canvas.width / this.currentImage.naturalWidth;
+                const scaleY = this.elements.canvas.height / this.currentImage.naturalHeight;
+
+                detections.forEach((detection, index) => {
+                    const box = detection.detection.box;
+
+                    // Scale the box coordinates
+                    const scaledBox = {
+                        x: box.x * scaleX,
+                        y: box.y * scaleY,
+                        width: box.width * scaleX,
+                        height: box.height * scaleY
+                    };
+
+                    // Draw face box
+                    this.ctx.strokeStyle = '#4facfe';
+                    this.ctx.lineWidth = 3;
+                    this.ctx.strokeRect(scaledBox.x, scaledBox.y, scaledBox.width, scaledBox.height);
+
+                    // Draw label
+                    this.ctx.fillStyle = '#4facfe';
+                    this.ctx.font = 'bold 16px Inter';
+                    const confidence = (detection.detection.score * 100).toFixed(0);
+                    this.ctx.fillText(`Face ${index + 1} (${confidence}%)`, scaledBox.x, scaledBox.y - 5);
+
+                    // Draw landmarks
+                    if (detection.landmarks) {
+                        this.ctx.fillStyle = '#ff4444';
+                        detection.landmarks.positions.forEach(point => {
+                            this.ctx.beginPath();
+                            this.ctx.arc(point.x * scaleX, point.y * scaleY, 2, 0, 2 * Math.PI);
+                            this.ctx.fill();
+                        });
+                    }
+                });
+            }
+
+            displayResults(detections) {
+                // Clear previous results
+                this.elements.faceInfo.innerHTML = '';
+                this.elements.predictions.innerHTML = '';
+
+                detections.forEach((detection, faceIndex) => {
+                    // Create face info
+                    const faceInfoDiv = document.createElement('div');
+                    faceInfoDiv.className = 'face-info';
+                    faceInfoDiv.innerHTML = `
                         <h3>Face ${faceIndex + 1}</h3>
                         <div class="face-details">
-                            <span class="face-detail">Confidence: ${(
-                              detection.detection.score * 100
-                            ).toFixed(1)}%</span>
-                            <span class="face-detail">Expressions: ${
-                              Object.keys(detection.expressions).length
-                            }</span>
+                            <span class="face-detail">Confidence: ${(detection.detection.score * 100).toFixed(1)}%</span>
+                            <span class="face-detail">Model: Ensemble AI</span>
                         </div>
                     `;
-            this.elements.faceInfo.appendChild(faceInfoDiv);
+                    this.elements.faceInfo.appendChild(faceInfoDiv);
 
-            // Expression predictions
-            const sortedExpressions = Object.entries(detection.expressions)
-              .map(([emotion, confidence]) => ({
-                name: emotion.charAt(0).toUpperCase() + emotion.slice(1),
-                emoji: this.expressions[emotion] || "😐",
-                confidence: confidence,
-              }))
-              .sort((a, b) => b.confidence - a.confidence);
+                    // Process and sort expressions
+                    const expressions = detection.expressions || {};
+                    const sortedExpressions = Object.entries(expressions)
+                        .map(([emotion, confidence]) => ({
+                            name: emotion.charAt(0).toUpperCase() + emotion.slice(1),
+                            emoji: this.expressions[emotion.toLowerCase()] || '😐',
+                            confidence: confidence || 0
+                        }))
+                        .sort((a, b) => b.confidence - a.confidence);
 
-            sortedExpressions.forEach((expr, index) => {
-              const card = document.createElement("div");
-              card.className = "prediction-card";
-              if (index === 0) {
-                card.classList.add("top-prediction");
-              }
+                    // Create prediction cards
+                    sortedExpressions.forEach((expr, index) => {
+                        const card = document.createElement('div');
+                        card.className = 'prediction-card';
+                        
+                        if (index === 0) {
+                            card.classList.add('top-prediction');
+                        }
 
-              const confidencePercent = (expr.confidence * 100).toFixed(1);
+                        const confidencePercent = (expr.confidence * 100).toFixed(1);
 
-              card.innerHTML = `
+                        card.innerHTML = `
                             <div class="expression-emoji">${expr.emoji}</div>
                             <div class="expression-name">${expr.name}</div>
                             <div class="confidence-bar">
-                                <div class="confidence-fill" style="width: ${confidencePercent}%"></div>
+                                <div class="confidence-fill" data-width="${confidencePercent}%"></div>
                             </div>
                             <div class="confidence-text">${confidencePercent}%</div>
                         `;
 
-              this.elements.predictions.appendChild(card);
-            });
-          });
+                        this.elements.predictions.appendChild(card);
+                    });
+                });
 
-          // Show results
-          this.elements.resultsSection.style.display = "block";
-
-          // Animate results if GSAP is available
-          if (typeof gsap !== "undefined") {
-            gsap.from(this.elements.resultsSection, {
-              opacity: 0,
-              y: 30,
-              duration: 0.5,
-              ease: "power2.out",
-            });
-
-            gsap.from(".prediction-card", {
-              opacity: 0,
-              y: 20,
-              duration: 0.4,
-              stagger: 0.1,
-              ease: "power2.out",
-              delay: 0.2,
-            });
-          }
-        }
-      }
-
-      // Initialize when DOM is ready and check for required libraries
-      document.addEventListener("DOMContentLoaded", function () {
-        // Check if required libraries are loaded
-        if (typeof tf === "undefined") {
-          document.getElementById("status").innerHTML =
-            "❌ TensorFlow.js failed to load. Please refresh the page.";
-          document.getElementById("status").className = "status error";
-          return;
-        }
-
-        if (typeof faceapi === "undefined") {
-          document.getElementById("status").innerHTML =
-            "❌ Face-API.js failed to load. Please refresh the page.";
-          document.getElementById("status").className = "status error";
-          return;
+                // Show results section
+                this.elements.resultsSection.style.display = 'block';
+                
+                // Animate results appearance
+                setTimeout(() => {
+                    this.elements.resultsSection.classList.add('visible');
+                    
+                    // Animate confidence bars
+                    document.querySelectorAll('.confidence-fill').forEach((bar, index) => {
+                        setTimeout(() => {
+                            const width = bar.getAttribute('data-width');
+                            bar.style.width = width;
+                        }, index * 100);
+                    });
+                    
+                    // Animate cards if GSAP is available
+                    if (typeof gsap !== 'undefined') {
+                        gsap.from('.prediction-card', {
+                            opacity: 0,
+                            y: 30,
+                            duration: 0.5,
+                            stagger: 0.1,
+                            ease: "power2.out"
+                        });
+                        
+                        gsap.from('.face-info', {
+                            opacity: 0,
+                            y: 20,
+                            duration: 0.4,
+                            ease: "power2.out"
+                        });
+                    }
+                }, 100);
+            }
         }
 
-        // Initialize the detector
-        new EnsembleExpressionDetector();
-      });
+        // Initialize when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check if required libraries are loaded
+            if (typeof tf === 'undefined') {
+                document.getElementById('status').innerHTML = '❌ TensorFlow.js failed to load. Please refresh the page.';
+                document.getElementById('status').className = 'status error';
+                return;
+            }
+            
+            if (typeof faceapi === 'undefined') {
+                document.getElementById('status').innerHTML = '❌ Face-API.js failed to load. Please refresh the page.';
+                document.getElementById('status').className = 'status error';
+                return;
+            }
 
-      // Handle script loading errors
-      window.addEventListener("error", function (e) {
-        if (
-          e.filename &&
-          (e.filename.includes("tensorflow") || e.filename.includes("face-api"))
-        ) {
-          document.getElementById("status").innerHTML =
-            "❌ Failed to load required libraries. Please check your internet connection and refresh.";
-          document.getElementById("status").className = "status error";
-        }
-      });
+            // Initialize the detector
+            new EnsembleExpressionDetector();
+        });
+
+        // Handle script loading errors
+        window.addEventListener('error', function(e) {
+            if (e.filename && (e.filename.includes('tensorflow') || e.filename.includes('face-api'))) {
+                document.getElementById('status').innerHTML = '❌ Failed to load required libraries. Please check your internet connection and refresh.';
+                document.getElementById('status').className = 'status error';
+            }
+        });
     </script>
-  </body>
+</body>
 </html>
