@@ -1079,7 +1079,7 @@
             .withFaceExpressions()
             .withAgeAndGender();
 
-          // --- CONSOLE LOGGING ---
+          // --- CONSOLE LOGGING UPDATE ---
           console.log(
             `%c--- Face-API Analysis Results ---`,
             "color: #03A9F4; font-weight: bold;"
@@ -1087,23 +1087,32 @@
           detections.forEach((detection, index) => {
             console.groupCollapsed(`Face #${index + 1} Details`);
 
-            // Log Face Detection Confidence
             const faceConfidence = (detection.detection.score * 100).toFixed(2);
             console.log(`Face Detection Confidence: ${faceConfidence}%`);
 
-            // Log Dominant Expression Confidence
             const expressions = detection.expressions;
             const maxConfidence = Math.max(...Object.values(expressions));
             const dominantExpression = Object.keys(expressions).find(
               (key) => expressions[key] === maxConfidence
             );
-            const expressionConfidence = (maxConfidence * 100).toFixed(2);
             console.log(
-              `Dominant Expression: ${dominantExpression} (${expressionConfidence}%)`
+              `Dominant Expression: %c${dominantExpression} (${(
+                maxConfidence * 100
+              ).toFixed(2)}%)`,
+              "font-weight: bold;"
             );
+
+            console.log("--- Full Expression Breakdown ---");
+            Object.entries(expressions).forEach(([emotion, confidence]) => {
+              const emotionName = (
+                emotion.charAt(0).toUpperCase() + emotion.slice(1)
+              ).padEnd(10, " ");
+              console.log(`${emotionName}: ${(confidence * 100).toFixed(2)}%`);
+            });
 
             console.groupEnd();
           });
+          // --- END LOGGING ---
 
           return detections;
         }
@@ -1121,16 +1130,12 @@
             .withFaceLandmarks()
             .withAgeAndGender();
 
-          if (faceDetections.length === 0) {
-            return [];
-          }
+          if (faceDetections.length === 0) return [];
 
-          // --- CONSOLE LOGGING ---
           console.log(
             `%c--- MobileNet Analysis Results ---`,
             "color: #8BC34A; font-weight: bold;"
           );
-          // --- END LOGGING ---
 
           const results = [];
           for (const [index, detection] of faceDetections.entries()) {
@@ -1143,15 +1148,13 @@
             const predictions = this.models.mobilenet.head.predict(embedding);
             const probabilities = await predictions.data();
 
-            // --- CONSOLE LOGGING ---
+            // --- CONSOLE LOGGING UPDATE ---
             console.groupCollapsed(`Face #${index + 1} Details`);
             const faceConfidence = (detection.detection.score * 100).toFixed(2);
             console.log(
               `Face Detection Confidence (from Face-API): ${faceConfidence}%`
             );
 
-            const maxConfidence = Math.max(...probabilities);
-            const expressionConfidence = (maxConfidence * 100).toFixed(2);
             const expressionNames = [
               "angry",
               "disgusted",
@@ -1161,11 +1164,24 @@
               "sad",
               "surprised",
             ];
+            const maxConfidence = Math.max(...probabilities);
             const dominantExpression =
               expressionNames[probabilities.indexOf(maxConfidence)];
             console.log(
-              `Emotion Prediction Confidence (from MobileNet): ${dominantExpression} (${expressionConfidence}%)`
+              `Dominant Emotion (from MobileNet): %c${dominantExpression} (${(
+                maxConfidence * 100
+              ).toFixed(2)}%)`,
+              "font-weight: bold;"
             );
+
+            console.log("--- Full Emotion Breakdown ---");
+            probabilities.forEach((confidence, i) => {
+              const emotionName = (
+                expressionNames[i].charAt(0).toUpperCase() +
+                expressionNames[i].slice(1)
+              ).padEnd(10, " ");
+              console.log(`${emotionName}: ${(confidence * 100).toFixed(2)}%`);
+            });
             console.groupEnd();
             // --- END LOGGING ---
 
@@ -1183,7 +1199,6 @@
               genderProbability: detection.genderProbability,
             });
           }
-
           return results;
         }
 
@@ -1198,17 +1213,15 @@
           const faceApiResults = await this.analyzeFaceApi();
           const mobileNetResults = await this.analyzeMobileNet();
 
-          // --- CONSOLE LOGGING ---
           console.log(
             `%c--- Ensemble Analysis Results ---`,
             "color: #FFC107; font-weight: bold;"
           );
-          // --- END LOGGING ---
 
           const ensembleResults = [];
           for (let i = 0; i < faceApiResults.length; i++) {
             const faceApi = faceApiResults[i];
-            const mobileNet = mobileNetResults[i] || faceApi; // Fallback just in case
+            const mobileNet = mobileNetResults[i] || faceApi;
 
             const combinedExpressions = {};
             const expressionNames = [
@@ -1228,7 +1241,7 @@
                 faceApiScore * 0.6 + mobileNetScore * 0.4;
             }
 
-            // --- CONSOLE LOGGING ---
+            // --- CONSOLE LOGGING UPDATE ---
             console.groupCollapsed(`Face #${i + 1} Details`);
             const faceConfidence = (faceApi.detection.score * 100).toFixed(2);
             console.log(`Face Detection Confidence: ${faceConfidence}%`);
@@ -1239,9 +1252,11 @@
             const dominantExpression = Object.keys(combinedExpressions).find(
               (key) => combinedExpressions[key] === maxConfidence
             );
-            const expressionConfidence = (maxConfidence * 100).toFixed(2);
             console.log(
-              `Final Ensemble Confidence: ${dominantExpression} (${expressionConfidence}%)`
+              `Final Ensemble Confidence: %c${dominantExpression} (${(
+                maxConfidence * 100
+              ).toFixed(2)}%)`,
+              "font-weight: bold;"
             );
             console.log(
               `-> Face-API component for '${dominantExpression}': ${(
@@ -1253,6 +1268,19 @@
                 mobileNet.expressions[dominantExpression] * 100
               ).toFixed(2)}%`
             );
+
+            console.log("--- Full Ensemble Breakdown ---");
+            Object.entries(combinedExpressions).forEach(
+              ([emotion, confidence]) => {
+                const emotionName = (
+                  emotion.charAt(0).toUpperCase() + emotion.slice(1)
+                ).padEnd(10, " ");
+                console.log(
+                  `${emotionName}: ${(confidence * 100).toFixed(2)}%`
+                );
+              }
+            );
+
             console.groupEnd();
             // --- END LOGGING ---
 
@@ -1265,7 +1293,6 @@
               genderProbability: faceApi.genderProbability,
             });
           }
-
           return ensembleResults;
         }
 
