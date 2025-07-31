@@ -474,6 +474,29 @@
           }
         }
 
+        getSingleBestFace(detections) {
+          if (!detections || detections.length === 0) {
+            return null; // Return null if no faces are found
+          }
+
+          if (detections.length === 1) {
+            return detections[0]; // Return the only face if there's just one
+          }
+
+          // Find the face with the largest bounding box area
+          return detections.reduce((largestFace, currentFace) => {
+            const largestArea =
+              largestFace.detection.box.width *
+              largestFace.detection.box.height;
+            const currentArea =
+              currentFace.detection.box.width *
+              currentFace.detection.box.height;
+
+            // If the current face is larger than the largest we've seen so far, it becomes the new largest
+            return currentArea > largestArea ? currentFace : largestFace;
+          });
+        }
+
         async loadAllModels() {
           this.status.textContent =
             "Loading multiple AI models for best accuracy...";
@@ -993,33 +1016,46 @@
             '<div class="loading"><div class="spinner"></div>Analyzing facial expressions...</div>';
 
           try {
-            let detections;
+            let allDetections;
 
             switch (this.activeModel) {
               case "face-api":
-                detections = await this.analyzeFaceApi();
+                allDetections = await this.analyzeFaceApi();
                 break;
               case "mobilenet":
-                detections = await this.analyzeMobileNet();
+                allDetections = await this.analyzeMobileNet();
                 break;
               case "ensemble":
-                detections = await this.analyzeEnsemble();
+                allDetections = await this.analyzeEnsemble();
                 break;
               default:
-                detections = await this.analyzeFaceApi();
+                allDetections = await this.analyzeFaceApi();
             }
 
-            if (!detections || detections.length === 0) {
+            if (!allDetections || allDetections.length === 0) {
               this.status.textContent =
                 "No faces detected in the image. Please try another image with clear faces.";
+              this.predictions.innerHTML = ""; // Clear previous predictions
+              this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height); // Clear canvas
               this.analyzeButton.disabled = false;
               return;
             }
 
-            this.drawDetections(detections);
-            this.displayDetections(detections);
+            // --- NEW LOGIC TO SELECT ONE FACE ---
+            const bestFace = this.getSingleBestFace(allDetections);
+            // We put the single result into an array because the display functions expect an array
+            const finalDetections = bestFace ? [bestFace] : [];
+            // --- END OF NEW LOGIC ---
 
-            this.status.textContent = `Analysis complete! Found ${detections.length} face(s) in the image.`;
+            this.drawDetections(finalDetections);
+            this.displayDetections(finalDetections);
+
+            // Update status message to be more informative
+            if (allDetections.length > 1) {
+              this.status.textContent = `Analysis complete! Found ${allDetections.length} faces, displaying the largest one.`;
+            } else {
+              this.status.textContent = `Analysis complete! Found 1 face in the image.`;
+            }
           } catch (error) {
             console.error("Analysis error:", error);
             this.status.textContent =
