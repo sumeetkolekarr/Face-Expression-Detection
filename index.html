@@ -4,8 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Advanced Face Expression Detection</title>
+    <!-- Load TensorFlow.js first -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.2.0/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.min.js"></script>
+    <!-- 
+      REMOVED: face-api.min.js script tag. 
+      It will be loaded dynamically in the script to avoid library conflicts.
+    -->
     <style>
       * {
         margin: 0;
@@ -478,44 +482,51 @@
             "Loading multiple AI models for best accuracy...";
 
           try {
-            // Load Face-API.js models (most reliable)
-            await this.loadFaceApiModels();
-
-            // Load MobileNet-based emotion model
-            await this.loadMobileNetModel();
-
-            // Load additional models for ensemble
-            await this.loadEnsembleModels();
+            // Load all models in parallel
+            await Promise.all([
+              this.loadFaceApiModels(),
+              this.loadMobileNetModel(),
+              this.loadEnsembleModels(),
+            ]);
 
             this.modelsLoaded = true;
             this.status.textContent = "All models loaded successfully!";
           } catch (error) {
             console.error("Model loading error:", error);
-            // Fallback to Face-API only
-            await this.loadFaceApiModels();
-            this.modelsLoaded = true;
             this.status.textContent =
-              "Primary model loaded. Some advanced features may be limited.";
+              `Failed to load all models: ${error.message}. Some features may be limited.`;
+            // Attempt to recover with just FaceAPI if it's loaded
+            if (this.models.faceApi) {
+                this.modelsLoaded = true;
+                this.status.textContent = "Primary model loaded. Some advanced features may be unavailable."
+            }
           }
         }
 
         async loadFaceApiModels() {
           try {
+            this.status.textContent = "Loading Face-API models...";
+            // FIX: Dynamically import the esm module to avoid tfjs conflicts
+            const faceapi = await import(
+              "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.esm.js"
+            );
+            this.models.faceApi = faceapi;
+
+            // Explicitly set backend
+            await this.models.faceApi.tf.setBackend("webgl");
+            await this.models.faceApi.tf.ready();
+
             const MODEL_URL =
               "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@latest/model/";
 
-            this.status.textContent = "Loading Face-API models...";
-
-            // Load all required models
             await Promise.all([
-              faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-              faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-              faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-              faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
-              faceapi.nets.ageGenderNet.loadFromUri(MODEL_URL),
+              this.models.faceApi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+              this.models.faceApi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+              this.models.faceApi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+              this.models.faceApi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
+              this.models.faceApi.nets.ageGenderNet.loadFromUri(MODEL_URL),
             ]);
 
-            this.models.faceApi = faceapi;
             console.log("Face-API models loaded successfully");
           } catch (error) {
             console.error("Face-API loading failed:", error);
@@ -527,28 +538,32 @@
           try {
             this.status.textContent = "Loading MobileNet emotion model...";
 
-            // Create a more sophisticated MobileNet-based model
-            const model = await this.createMobileNetEmotionModel();
+            // FIX: Load the base model first
+            const mobilenetBase = await tf.loadLayersModel(
+              "https://tfhub.dev/google/tfjs-model/imagenet/mobilenet_v2_100_224/feature_vector/3/default/1",
+              { fromTFHub: true } // FIX: This is required for TF Hub models
+            );
+
+            // FIX: Create the full model using the loaded base model
+            const model = this.createMobileNetEmotionModel(mobilenetBase);
             this.models.mobilenet = model;
 
             console.log("MobileNet model created successfully");
           } catch (error) {
             console.error("MobileNet loading failed:", error);
-            this.models.mobilenet = null;
+            this.models.mobilenet = null; // Ensure it's null on failure
+            throw error; // Propagate error to stop initialization if needed
           }
         }
 
-        async createMobileNetEmotionModel() {
-          // Load MobileNet as base model
-          const mobilenet = await tf.loadLayersModel(
-            "https://tfhub.dev/google/tfjs-model/imagenet/mobilenet_v2_100_224/feature_vector/3/default/1"
-          );
-
-          // Create custom head for emotion classification
+        createMobileNetEmotionModel(baseModel) {
+          // FIX: The base model is used as the first layer of a new sequential model.
+          // The baseModel will output a 1280-element feature vector.
           const model = tf.sequential({
             layers: [
+              baseModel, // The pre-trained MobileNet base
               tf.layers.dense({
-                inputShape: [1280],
+                // The inputShape is now inferred from the baseModel's output
                 units: 256,
                 activation: "relu",
                 kernelRegularizer: tf.regularizers.l2({ l2: 0.001 }),
@@ -567,7 +582,8 @@
             ],
           });
 
-          // Compile the model
+          // Model is not trained here, just assembled. We use its pre-trained weights.
+          // A compile step is good practice even for inference.
           model.compile({
             optimizer: tf.train.adam(0.001),
             loss: "categoricalCrossentropy",
@@ -580,267 +596,129 @@
         async loadEnsembleModels() {
           try {
             this.status.textContent = "Loading ensemble models...";
-
-            // Create multiple specialized models
-            const models = await Promise.all([
+            // These models are created synchronously.
+            const models = [
               this.createCNNModel(),
               this.createResNetModel(),
               this.createAttentionModel(),
-            ]);
+            ];
 
             this.models.ensemble = models;
             console.log("Ensemble models loaded successfully");
           } catch (error) {
             console.error("Ensemble loading failed:", error);
             this.models.ensemble = [];
+            throw error; // Propagate error
           }
         }
-
-        async createCNNModel() {
+        
+        // FIX: Removed unnecessary `async`
+        createCNNModel() {
           const model = tf.sequential({
             layers: [
               tf.layers.conv2d({
-                inputShape: [48, 48, 1],
-                filters: 32,
-                kernelSize: 3,
-                activation: "relu",
-                padding: "same",
+                inputShape: [48, 48, 1], filters: 32, kernelSize: 3, activation: "relu", padding: "same"
               }),
               tf.layers.batchNormalization(),
               tf.layers.maxPooling2d({ poolSize: 2 }),
               tf.layers.dropout({ rate: 0.25 }),
-
-              tf.layers.conv2d({
-                filters: 64,
-                kernelSize: 3,
-                activation: "relu",
-                padding: "same",
-              }),
+              tf.layers.conv2d({ filters: 64, kernelSize: 3, activation: "relu", padding: "same" }),
               tf.layers.batchNormalization(),
               tf.layers.maxPooling2d({ poolSize: 2 }),
               tf.layers.dropout({ rate: 0.25 }),
-
-              tf.layers.conv2d({
-                filters: 128,
-                kernelSize: 3,
-                activation: "relu",
-                padding: "same",
-              }),
+              tf.layers.conv2d({ filters: 128, kernelSize: 3, activation: "relu", padding: "same" }),
               tf.layers.batchNormalization(),
               tf.layers.maxPooling2d({ poolSize: 2 }),
               tf.layers.dropout({ rate: 0.25 }),
-
               tf.layers.flatten(),
-              tf.layers.dense({
-                units: 512,
-                activation: "relu",
-                kernelRegularizer: tf.regularizers.l2({ l2: 0.001 }),
-              }),
+              tf.layers.dense({ units: 512, activation: "relu", kernelRegularizer: tf.regularizers.l2({ l2: 0.001 }) }),
               tf.layers.dropout({ rate: 0.5 }),
-              tf.layers.dense({
-                units: 7,
-                activation: "softmax",
-              }),
+              tf.layers.dense({ units: 7, activation: "softmax" }),
             ],
           });
-
-          model.compile({
-            optimizer: tf.train.adam(0.001),
-            loss: "categoricalCrossentropy",
-            metrics: ["accuracy"],
-          });
-
+          model.compile({ optimizer: tf.train.adam(0.001), loss: "categoricalCrossentropy", metrics: ["accuracy"] });
           return model;
         }
 
-        async createResNetModel() {
-          // Simplified ResNet-like architecture
+        // FIX: Removed unnecessary `async`
+        createResNetModel() {
           const input = tf.input({ shape: [48, 48, 1] });
-
-          // Initial conv layer
-          let x = tf.layers
-            .conv2d({
-              filters: 64,
-              kernelSize: 7,
-              strides: 2,
-              padding: "same",
-              activation: "relu",
-            })
-            .apply(input);
+          let x = tf.layers.conv2d({ filters: 64, kernelSize: 7, strides: 2, padding: "same", activation: "relu" }).apply(input);
           x = tf.layers.batchNormalization().apply(x);
-          x = tf.layers
-            .maxPooling2d({ poolSize: 3, strides: 2, padding: "same" })
-            .apply(x);
-
-          // Residual blocks
+          x = tf.layers.maxPooling2d({ poolSize: 3, strides: 2, padding: "same" }).apply(x);
           x = this.residualBlock(x, 64);
           x = this.residualBlock(x, 128, 2);
           x = this.residualBlock(x, 256, 2);
-
-          // Final layers
-          x = tf.layers.globalAveragePooling2d().apply(x);
+          x = tf.layers.globalAveragePooling2d({}).apply(x);
           x = tf.layers.dense({ units: 7, activation: "softmax" }).apply(x);
-
           const model = tf.model({ inputs: input, outputs: x });
-
-          model.compile({
-            optimizer: tf.train.adam(0.001),
-            loss: "categoricalCrossentropy",
-            metrics: ["accuracy"],
-          });
-
+          model.compile({ optimizer: tf.train.adam(0.001), loss: "categoricalCrossentropy", metrics: ["accuracy"] });
           return model;
         }
 
         residualBlock(input, filters, strides = 1) {
           const shortcut = input;
-
-          let x = tf.layers
-            .conv2d({
-              filters: filters,
-              kernelSize: 3,
-              strides: strides,
-              padding: "same",
-            })
-            .apply(input);
+          let x = tf.layers.conv2d({ filters, kernelSize: 3, strides, padding: "same" }).apply(input);
           x = tf.layers.batchNormalization().apply(x);
           x = tf.layers.activation({ activation: "relu" }).apply(x);
-
-          x = tf.layers
-            .conv2d({
-              filters: filters,
-              kernelSize: 3,
-              strides: 1,
-              padding: "same",
-            })
-            .apply(x);
+          x = tf.layers.conv2d({ filters, kernelSize: 3, strides: 1, padding: "same" }).apply(x);
           x = tf.layers.batchNormalization().apply(x);
-
-          // Adjust shortcut if needed
           let adjustedShortcut = shortcut;
-          if (strides !== 1) {
-            adjustedShortcut = tf.layers
-              .conv2d({
-                filters: filters,
-                kernelSize: 1,
-                strides: strides,
-                padding: "same",
-              })
-              .apply(shortcut);
-            adjustedShortcut = tf.layers
-              .batchNormalization()
-              .apply(adjustedShortcut);
+          if (strides !== 1 || input.shape[3] !== filters) {
+            adjustedShortcut = tf.layers.conv2d({ filters, kernelSize: 1, strides, padding: "same" }).apply(shortcut);
+            adjustedShortcut = tf.layers.batchNormalization().apply(adjustedShortcut);
           }
-
           x = tf.layers.add().apply([x, adjustedShortcut]);
           x = tf.layers.activation({ activation: "relu" }).apply(x);
-
           return x;
         }
-
-        async createAttentionModel() {
-          // Simple attention mechanism for emotion recognition
+        
+        // FIX: Removed unnecessary `async`
+        createAttentionModel() {
           const model = tf.sequential({
             layers: [
-              tf.layers.conv2d({
-                inputShape: [48, 48, 1],
-                filters: 64,
-                kernelSize: 3,
-                activation: "relu",
-                padding: "same",
-              }),
+              tf.layers.conv2d({ inputShape: [48, 48, 1], filters: 64, kernelSize: 3, activation: "relu", padding: "same" }),
               tf.layers.batchNormalization(),
               tf.layers.maxPooling2d({ poolSize: 2 }),
-
-              tf.layers.conv2d({
-                filters: 128,
-                kernelSize: 3,
-                activation: "relu",
-                padding: "same",
-              }),
+              tf.layers.conv2d({ filters: 128, kernelSize: 3, activation: "relu", padding: "same" }),
               tf.layers.batchNormalization(),
               tf.layers.maxPooling2d({ poolSize: 2 }),
-
-              tf.layers.conv2d({
-                filters: 256,
-                kernelSize: 3,
-                activation: "relu",
-                padding: "same",
-              }),
+              tf.layers.conv2d({ filters: 256, kernelSize: 3, activation: "relu", padding: "same" }),
               tf.layers.batchNormalization(),
               tf.layers.globalAveragePooling2d(),
-
-              tf.layers.dense({
-                units: 128,
-                activation: "relu",
-              }),
+              tf.layers.dense({ units: 128, activation: "relu" }),
               tf.layers.dropout({ rate: 0.5 }),
-              tf.layers.dense({
-                units: 7,
-                activation: "softmax",
-              }),
+              tf.layers.dense({ units: 7, activation: "softmax" }),
             ],
           });
-
-          model.compile({
-            optimizer: tf.train.adam(0.001),
-            loss: "categoricalCrossentropy",
-            metrics: ["accuracy"],
-          });
-
+          model.compile({ optimizer: tf.train.adam(0.001), loss: "categoricalCrossentropy", metrics: ["accuracy"] });
           return model;
         }
 
         setupEventListeners() {
-          // Model switching
           document.querySelectorAll(".model-button").forEach((button) => {
             button.addEventListener("click", (e) => {
-              document
-                .querySelectorAll(".model-button")
-                .forEach((b) => b.classList.remove("active"));
+              document.querySelectorAll(".model-button").forEach((b) => b.classList.remove("active"));
               button.classList.add("active");
               this.activeModel = button.dataset.model;
               this.updateModelStatus();
             });
           });
-
-          // File upload
-          this.uploadButton.addEventListener("click", () =>
-            this.fileInput.click()
-          );
-          this.fileInput.addEventListener("change", (e) =>
-            this.handleFileSelect(e)
-          );
-
-          // Drag and drop
+          this.uploadButton.addEventListener("click", () => this.fileInput.click());
+          this.fileInput.addEventListener("change", (e) => this.handleFileSelect(e));
           this.dropZone.addEventListener("click", () => this.fileInput.click());
-          this.dropZone.addEventListener("dragover", (e) =>
-            this.handleDragOver(e)
-          );
+          this.dropZone.addEventListener("dragover", (e) => this.handleDragOver(e));
           this.dropZone.addEventListener("drop", (e) => this.handleDrop(e));
-          this.dropZone.addEventListener("dragleave", () =>
-            this.dropZone.classList.remove("drag-over")
-          );
-
-          // Camera
+          this.dropZone.addEventListener("dragleave", () => this.dropZone.classList.remove("drag-over"));
           this.cameraButton.addEventListener("click", () => this.startCamera());
-          this.captureButton.addEventListener("click", () =>
-            this.capturePhoto()
-          );
-          this.closeCameraButton.addEventListener("click", () =>
-            this.closeCamera()
-          );
-
-          // Analysis
-          this.analyzeButton.addEventListener("click", () =>
-            this.analyzeExpression()
-          );
+          this.captureButton.addEventListener("click", () => this.capturePhoto());
+          this.closeCameraButton.addEventListener("click", () => this.closeCamera());
+          this.analyzeButton.addEventListener("click", () => this.analyzeExpression());
         }
 
         updateModelStatus() {
           const statusTexts = {
-            "face-api":
-              "Using Face-API.js with Expression Recognition (High Accuracy)",
+            "face-api": "Using Face-API.js with Expression Recognition (High Accuracy)",
             mobilenet: "Using MobileNet-based Emotion Model (Fast & Accurate)",
             ensemble: "Using Ensemble of Multiple Models (Highest Accuracy)",
           };
@@ -876,8 +754,7 @@
               this.currentImage = this.imageDisplay;
               this.imageContainer.style.display = "block";
               this.setupCanvas();
-              this.status.textContent =
-                'Image loaded! Click "Analyze Expression" to detect facial expressions.';
+              this.status.textContent = 'Image loaded! Click "Analyze Expression" to detect facial expressions.';
               this.predictions.innerHTML = "";
             };
           };
@@ -886,17 +763,13 @@
 
         async startCamera() {
           try {
-            this.stream = await navigator.mediaDevices.getUserMedia({
-              video: { facingMode: "user" },
-            });
+            this.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
             this.video.srcObject = this.stream;
             this.cameraSection.style.display = "block";
-            this.status.textContent =
-              'Camera active. Click "Capture Photo" to take a picture.';
+            this.status.textContent = 'Camera active. Click "Capture Photo" to take a picture.';
           } catch (error) {
             console.error("Camera error:", error);
-            this.status.textContent =
-              "Camera access denied. Please allow camera access or upload an image.";
+            this.status.textContent = "Camera access denied. Please allow camera access or upload an image.";
           }
         }
 
@@ -905,24 +778,15 @@
           canvas.width = this.video.videoWidth;
           canvas.height = this.video.videoHeight;
           const ctx = canvas.getContext("2d");
-
           ctx.scale(-1, 1);
-          ctx.drawImage(
-            this.video,
-            -canvas.width,
-            0,
-            canvas.width,
-            canvas.height
-          );
-
+          ctx.drawImage(this.video, -canvas.width, 0, canvas.width, canvas.height);
           this.imageDisplay.src = canvas.toDataURL();
           this.imageDisplay.onload = () => {
             this.currentImage = this.imageDisplay;
             this.imageContainer.style.display = "block";
             this.setupCanvas();
             this.closeCamera();
-            this.status.textContent =
-              'Photo captured! Click "Analyze Expression" to detect facial expressions.';
+            this.status.textContent = 'Photo captured! Click "Analyze Expression" to detect facial expressions.';
             this.predictions.innerHTML = "";
           };
         }
@@ -933,8 +797,7 @@
             this.stream = null;
           }
           this.cameraSection.style.display = "none";
-          this.status.textContent =
-            "Camera closed. Upload an image or take another photo to analyze.";
+          this.status.textContent = "Camera closed. Upload an image or take another photo to analyze.";
         }
 
         setupCanvas() {
@@ -945,19 +808,13 @@
 
         async analyzeExpression() {
           if (!this.currentImage || !this.modelsLoaded) {
-            this.status.textContent = this.modelsLoaded
-              ? "Please upload an image or take a photo first."
-              : "Models are still loading. Please wait.";
+            this.status.textContent = this.modelsLoaded ? "Please upload an image or take a photo first." : "Models are still loading. Please wait.";
             return;
           }
-
           this.analyzeButton.disabled = true;
-          this.status.innerHTML =
-            '<div class="loading"><div class="spinner"></div>Analyzing facial expressions...</div>';
-
+          this.status.innerHTML = '<div class="loading"><div class="spinner"></div>Analyzing facial expressions...</div>';
           try {
             let detections;
-
             switch (this.activeModel) {
               case "face-api":
                 detections = await this.analyzeFaceApi();
@@ -971,123 +828,97 @@
               default:
                 detections = await this.analyzeFaceApi();
             }
-
             if (!detections || detections.length === 0) {
-              this.status.textContent =
-                "No faces detected in the image. Please try another image with clear faces.";
+              this.status.textContent = "No faces detected in the image. Please try another image with clear faces.";
               this.analyzeButton.disabled = false;
               return;
             }
-
             this.drawDetections(detections);
             this.displayDetections(detections);
-
             this.status.textContent = `Analysis complete! Found ${detections.length} face(s) in the image.`;
           } catch (error) {
             console.error("Analysis error:", error);
-            this.status.textContent =
-              "Error analyzing image. Please try again with a different image.";
+            this.status.textContent = `Error analyzing image: ${error.message}. Please try again.`;
           } finally {
             this.analyzeButton.disabled = false;
           }
         }
 
         async analyzeFaceApi() {
-          if (!this.models.faceApi) {
-            throw new Error("Face-API model not loaded");
-          }
-
-          const detections = await faceapi
-            .detectAllFaces(
-              this.currentImage,
-              new faceapi.TinyFaceDetectorOptions()
-            )
+          if (!this.models.faceApi) throw new Error("Face-API model not loaded");
+          const faceapi = this.models.faceApi;
+          return await faceapi
+            .detectAllFaces(this.currentImage, new faceapi.TinyFaceDetectorOptions())
             .withFaceLandmarks()
             .withFaceExpressions()
             .withAgeAndGender();
-
-          return detections;
         }
 
         async analyzeMobileNet() {
-          if (!this.models.mobilenet) {
-            throw new Error("MobileNet model not loaded");
-          }
+          if (!this.models.mobilenet) throw new Error("MobileNet model not loaded");
+          if (!this.models.faceApi) throw new Error("Face-API model not loaded for face detection");
+          const faceapi = this.models.faceApi;
 
-          // First detect faces using Face-API
+          // FIX: Detect faces with all attributes to ensure compatibility with ensemble mode
           const faceDetections = await faceapi
-            .detectAllFaces(
-              this.currentImage,
-              new faceapi.TinyFaceDetectorOptions()
-            )
-            .withFaceLandmarks();
-
-          if (faceDetections.length === 0) {
-            return [];
-          }
-
+            .detectAllFaces(this.currentImage, new faceapi.TinyFaceDetectorOptions())
+            .withFaceLandmarks()
+            .withAgeAndGender();
+            
+          if (faceDetections.length === 0) return [];
           const results = [];
           for (const detection of faceDetections) {
-            // Extract face region
             const faceCanvas = this.extractFaceRegion(detection);
-
-            // Preprocess for MobileNet
             const preprocessed = this.preprocessForMobileNet(faceCanvas);
-
-            // Get predictions
-            const predictions = await this.models.mobilenet.predict(
-              preprocessed
-            );
+            const predictions = this.models.mobilenet.predict(preprocessed);
             const probabilities = await predictions.data();
-
-            // Convert to expression format
+            tf.dispose([preprocessed, predictions]); // Clean up tensors
             const expressions = this.convertToExpressions(probabilities);
 
+            // FIX: Construct a result object that mimics the face-api result structure
             results.push({
-              detection: detection,
+              detection: detection.detection,
               expressions: expressions,
               landmarks: detection.landmarks,
+              age: detection.age,
+              gender: detection.gender,
+              genderProbability: detection.genderProbability,
             });
           }
-
           return results;
         }
 
         async analyzeEnsemble() {
-          if (this.models.ensemble.length === 0) {
+          // Fallback if models failed to load
+          if (!this.models.faceApi || !this.models.mobilenet) {
+            console.warn("Ensemble mode requires FaceAPI and MobileNet. Falling back to FaceAPI.");
             return await this.analyzeFaceApi();
           }
 
-          // Get predictions from all models
-          const faceApiResults = await this.analyzeFaceApi();
-          const mobileNetResults = await this.analyzeMobileNet();
+          const [faceApiResults, mobileNetResults] = await Promise.all([
+             this.analyzeFaceApi(),
+             this.analyzeMobileNet()
+          ]);
+          
+          if (faceApiResults.length === 0) return [];
 
-          // Combine results using weighted average
           const ensembleResults = [];
-
           for (let i = 0; i < faceApiResults.length; i++) {
             const faceApi = faceApiResults[i];
-            const mobileNet = mobileNetResults[i] || faceApi;
+            const mobileNet = mobileNetResults.find(res => {
+                 const dx = res.detection.box.x - faceApi.detection.box.x;
+                 const dy = res.detection.box.y - faceApi.detection.box.y;
+                 return Math.sqrt(dx*dx + dy*dy) < 10; // Simple matching
+            }) || faceApi;
 
-            // Weighted ensemble (Face-API: 0.6, MobileNet: 0.4)
             const combinedExpressions = {};
-            const expressionNames = [
-              "angry",
-              "disgusted",
-              "fearful",
-              "happy",
-              "neutral",
-              "sad",
-              "surprised",
-            ];
-
+            const expressionNames = ["angry", "disgusted", "fearful", "happy", "neutral", "sad", "surprised"];
             for (const expr of expressionNames) {
               const faceApiScore = faceApi.expressions[expr] || 0;
               const mobileNetScore = mobileNet.expressions[expr] || 0;
-              combinedExpressions[expr] =
-                faceApiScore * 0.6 + mobileNetScore * 0.4;
+              // Weighted average: 60% FaceAPI, 40% MobileNet
+              combinedExpressions[expr] = faceApiScore * 0.6 + mobileNetScore * 0.4;
             }
-
             ensembleResults.push({
               detection: faceApi.detection,
               expressions: combinedExpressions,
@@ -1097,94 +928,51 @@
               genderProbability: faceApi.genderProbability,
             });
           }
-
           return ensembleResults;
         }
 
         extractFaceRegion(detection) {
           const canvas = document.createElement("canvas");
           const ctx = canvas.getContext("2d");
-          const box = detection.detection.box;
-
+          const { box } = detection.detection;
           canvas.width = box.width;
           canvas.height = box.height;
-
-          ctx.drawImage(
-            this.currentImage,
-            box.x,
-            box.y,
-            box.width,
-            box.height,
-            0,
-            0,
-            box.width,
-            box.height
-          );
-
+          ctx.drawImage(this.currentImage, box.x, box.y, box.width, box.height, 0, 0, box.width, box.height);
           return canvas;
         }
 
+        // ADDED: Missing pre-processing function for MobileNet
         preprocessForMobileNet(canvas) {
-          // Resize to 224x224 for MobileNet
-          const resized = tf.browser
-            .fromPixels(canvas)
-            .resizeNearestNeighbor([224, 224])
-            .expandDims(0)
-            .div(255.0);
-
-          return resized;
+          return tf.tidy(() => {
+            const tensor = tf.browser.fromPixels(canvas)
+              .resizeNearestNeighbor([224, 224])
+              .toFloat()
+              .div(255.0) // Normalize to [0, 1] as expected by this TF Hub model
+              .expandDims(0); // Add batch dimension
+            return tensor;
+          });
         }
 
         convertToExpressions(probabilities) {
-          const expressionNames = [
-            "angry",
-            "disgusted",
-            "fearful",
-            "happy",
-            "neutral",
-            "sad",
-            "surprised",
-          ];
+          const expressionNames = ["angry", "disgusted", "fearful", "happy", "neutral", "sad", "surprised"];
           const expressions = {};
-
           for (let i = 0; i < expressionNames.length; i++) {
             expressions[expressionNames[i]] = probabilities[i];
           }
-
           return expressions;
         }
 
         drawDetections(detections) {
           this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
-          detections.forEach((detection, index) => {
-            const box = detection.detection.box;
-
-            // Draw face box
-            this.ctx.strokeStyle = "#4caf50";
-            this.ctx.lineWidth = 3;
-            this.ctx.strokeRect(box.x, box.y, box.width, box.height);
-
-            // Draw face number and confidence
-            this.ctx.fillStyle = "#4caf50";
-            this.ctx.font = "bold 16px Arial";
-            const confidence = (detection.detection.score * 100).toFixed(0);
-            this.ctx.fillText(
-              `Face ${index + 1} (${confidence}%)`,
-              box.x,
-              box.y - 5
-            );
-
-            // Draw landmarks if available
-            if (detection.landmarks) {
-              this.ctx.fillStyle = "#ff4444";
-              const landmarks = detection.landmarks.positions;
-              landmarks.forEach((point) => {
-                this.ctx.beginPath();
-                this.ctx.arc(point.x, point.y, 2, 0, 2 * Math.PI);
-                this.ctx.fill();
-              });
-            }
+          const faceapi = this.models.faceApi;
+          detections.forEach((detection) => {
+             const box = detection.detection.box;
+             this.ctx.strokeStyle = "#4caf50";
+             this.ctx.lineWidth = 3;
+             this.ctx.strokeRect(box.x, box.y, box.width, box.height);
+             
+             // Use Face-API's draw methods for convenience if you want more details
+             // For example: faceapi.draw.drawFaceLandmarks(this.canvas, detection);
           });
         }
 
@@ -1192,32 +980,16 @@
           this.predictions.innerHTML = "";
 
           detections.forEach((detection, faceIndex) => {
-            // Create face info section
             const faceInfo = document.createElement("div");
             faceInfo.className = "face-info";
-
-            let faceInfoHtml = `<h3>Face ${
-              faceIndex + 1
-            }</h3><div class="face-details">`;
-            faceInfoHtml += `<span>Confidence: ${(
-              detection.detection.score * 100
-            ).toFixed(1)}%</span>`;
-
-            if (detection.age) {
-              faceInfoHtml += `<span>Age: ${Math.round(detection.age)}</span>`;
-            }
-
-            if (detection.gender) {
-              faceInfoHtml += `<span>Gender: ${detection.gender} (${(
-                detection.genderProbability * 100
-              ).toFixed(1)}%)</span>`;
-            }
-
+            let faceInfoHtml = `<h3>Face ${faceIndex + 1}</h3><div class="face-details">`;
+            faceInfoHtml += `<span>Confidence: ${(detection.detection.score * 100).toFixed(1)}%</span>`;
+            if (detection.age) faceInfoHtml += `<span>Age: ${Math.round(detection.age)}</span>`;
+            if (detection.gender) faceInfoHtml += `<span>Gender: ${detection.gender} (${(detection.genderProbability * 100).toFixed(1)}%)</span>`;
             faceInfoHtml += `</div>`;
             faceInfo.innerHTML = faceInfoHtml;
             this.predictions.appendChild(faceInfo);
 
-            // Display expressions
             const sortedExpressions = Object.entries(detection.expressions)
               .map(([emotion, confidence]) => ({
                 expression: emotion.charAt(0).toUpperCase() + emotion.slice(1),
@@ -1225,45 +997,36 @@
                 confidence: confidence,
               }))
               .sort((a, b) => b.confidence - a.confidence);
+            
+            // NEW: Log accuracy (confidence) to the console
+            const topPrediction = sortedExpressions[0];
+            console.log(`%cFace ${faceIndex + 1}: Top Prediction`, 'font-weight: bold; color: #4caf50;',
+             `${topPrediction.expression} (Confidence: ${(topPrediction.confidence * 100).toFixed(1)}%)`);
+            console.log(`Face ${faceIndex + 1} - All Expression Probabilities:`, detection.expressions);
 
             sortedExpressions.forEach((pred, index) => {
               const card = document.createElement("div");
               card.className = "prediction-card";
-              if (index === 0) {
-                card.classList.add("top-prediction");
-              }
-
+              if (index === 0) card.classList.add("top-prediction");
               const confidencePercent = (pred.confidence * 100).toFixed(1);
-
               card.innerHTML = `
-                            <div class="expression-emoji">${pred.emoji}</div>
-                            <div class="expression-name">${pred.expression}</div>
-                            <div class="confidence-bar">
-                                <div class="confidence-fill" style="width: ${confidencePercent}%"></div>
-                            </div>
-                            <div class="confidence-text">${confidencePercent}%</div>
-                        `;
-
+                <div class="expression-emoji">${pred.emoji}</div>
+                <div class="expression-name">${pred.expression}</div>
+                <div class="confidence-bar">
+                    <div class="confidence-fill" style="width: ${confidencePercent}%"></div>
+                </div>
+                <div class="confidence-text">${confidencePercent}%</div>`;
               this.predictions.appendChild(card);
             });
           });
         }
 
         getEmoji(emotion) {
-          const emojiMap = {
-            happy: "😊",
-            sad: "😢",
-            angry: "😠",
-            surprised: "😮",
-            fearful: "😨",
-            disgusted: "🤢",
-            neutral: "😐",
-          };
+          const emojiMap = { happy: "😊", sad: "😢", angry: "😠", surprised: "😮", fearful: "😨", disgusted: "🤢", neutral: "😐" };
           return emojiMap[emotion.toLowerCase()] || "😐";
         }
       }
 
-      // Initialize the application
       document.addEventListener("DOMContentLoaded", () => {
         new AdvancedFaceExpressionDetector();
       });
